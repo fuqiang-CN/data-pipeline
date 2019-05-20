@@ -1,11 +1,10 @@
 package datacommunity.datapipeline
 
+import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.log4j.Logger
-import org.apache.log4j.Level
+import org.apache.spark.sql.types._
 
 object OrderEventProcessor {
   def main(args: Array[String]): Unit = {
@@ -44,14 +43,21 @@ object OrderEventProcessor {
     import spark.implicits._
 
     dataFrame
-        .withColumn("value", from_json($"value".cast("string"), schema))
+      .withColumn("value", from_json($"value".cast("string"), schema))
       .select($"value.*")
       .withColumn("item", explode($"payload.items"))
       .withColumn("Title", $"item.title")
       .withColumn("Quantity", $"item.quantity")
       .select($"Title", $"Quantity", $"timestamp")
+      .withWatermark("timestamp", "10 seconds")
+      .groupBy(
+        window($"timestamp", "10 seconds", "5 seconds"),
+        $"Title"
+      )
+      .sum("Quantity")
       .writeStream
-      .outputMode(OutputMode.Append())
+      .outputMode(OutputMode.Complete())
+      //      .outputMode(OutputMode.Append())
       .format("console")
       .option("truncate", "false")
       .start()

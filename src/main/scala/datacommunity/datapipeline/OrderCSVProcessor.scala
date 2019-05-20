@@ -1,5 +1,6 @@
 package datacommunity.datapipeline
 
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SaveMode, SparkSession}
 
 object OrderCSVProcessor {
@@ -20,9 +21,25 @@ object OrderCSVProcessor {
 
   def run(spark: SparkSession, inputPath: String, outputPath: String): Unit = {
 
-    spark.read
-      .csv(inputPath)
+    val schema = StructType(Seq(
+      StructField("OrderId", StringType),
+      StructField("Title", StringType),
+      StructField("Quantity", IntegerType),
+      StructField("CreateTime", TimestampType)
+    ))
+
+
+    val df = spark.read.option("header", true).schema(schema).csv(inputPath)
+
+    val frame = df.withColumn("Date", df("CreateTime").cast(DateType))
+    frame.show()
+    frame
+      .groupBy("Title", "Date")
+      .count()
+      .withColumnRenamed("count", "Total")
+      .select( "Date", "Title", "Total")
       .write
+      .option("header", true)
       .mode(SaveMode.Overwrite)
       .csv(outputPath)
   }
